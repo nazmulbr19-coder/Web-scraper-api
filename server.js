@@ -3,7 +3,6 @@ const cors = require('cors');
 
 const app = express();
 
-// Explicit CORS configuration for mobile browsers and web apps
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -12,15 +11,15 @@ app.use(cors({
 
 app.use(express.json());
 
-// Load routes
+// Routes
 const animeRoutes = require('./src/routes/anime.routes');
 app.use('/api/anime', animeRoutes);
 
-// Root route
+// Base route
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
-    message: 'Anime Streaming API is running smoothly on Vercel!',
+    message: 'Anime Streaming API is live on Vercel!',
     endpoints: {
       trending: '/api/anime/trending',
       search: '/api/anime/search?query=naruto',
@@ -30,7 +29,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// Local listener
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
