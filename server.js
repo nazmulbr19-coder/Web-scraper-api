@@ -3,14 +3,20 @@ const cors = require('cors');
 
 const app = express();
 
-app.use(cors());
+// Explicit CORS configuration for mobile browsers and web apps
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
-// Routes
+// Load routes
 const animeRoutes = require('./src/routes/anime.routes');
 app.use('/api/anime', animeRoutes);
 
-// Base Route
+// Root route
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
@@ -24,11 +30,10 @@ app.get('/', (req, res) => {
   });
 });
 
-// Local development listener
+// Local listener
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`Local server running on port ${PORT}`));
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 
 module.exports = app;
-
