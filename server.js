@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
+const cheerio = require('cheerio');
 
 const app = express();
 
@@ -11,15 +13,135 @@ app.use(cors({
 
 app.use(express.json());
 
-// Routes
-const animeRoutes = require('./src/routes/anime.routes');
-app.use('/api/anime', animeRoutes);
+// --- ANILIST API (Trending & Search & Info) ---
+const ANILIST_URL = 'https://graphql.anilist.co';
 
-// Base route
+async function fetchAniList(query, variables = {}) {
+  try {
+    const response = await axios.post(ANILIST_URL, { query, variables });
+    return response.data.data;
+  } catch (error) {
+    throw new Error(`AniList API Error: ${error.message}`);
+  }
+}
+
+// 1. Trending Route
+app.get('/api/anime/trending', async (req, res) => {
+  try {
+    const query = `
+      query {
+        Page(page: 1, perPage: 15) {
+          media(sort: TRENDING_DESC, type: ANIME) {
+            id
+            title { romaji english }
+            coverImage { large }
+            episodes
+            status
+            averageScore
+          }
+        }
+      }
+    `;
+    const data = await fetchAniList(query);
+    res.json({ success: true, data: data.Page.media });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 2. Search Route
+app.get('/api/anime/search', async (req, res) => {
+  try {
+    const searchQuery = req.query.query;
+    if (!searchQuery) {
+      return res.status(400).json({ success: false, error: 'Query parameter is required' });
+    }
+
+    const query = `
+      query ($search: String) {
+        Page(page: 1, perPage: 20) {
+          media(search: $search, type: ANIME) {
+            id
+            title { romaji english }
+            coverImage { large }
+            episodes
+            status
+          }
+        }
+      }
+    `;
+    const data = await fetchAniList(query, { search: searchQuery });
+    res.json({ success: true, data: data.Page.media });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 3. Info Route
+app.get('/api/anime/info/:id', async (req, res) => {
+  try {
+    const animeId = parseInt(req.params.id);
+    const query = `
+      query ($id: Int) {
+        Media(id: $id, type: ANIME) {
+          id
+          title { romaji english }
+          description
+          coverImage { large }
+          episodes
+          status
+          genres
+          studios { nodes { name } }
+        }
+      }
+    `;
+    const data = await fetchAniList(query, { id: animeId });
+    res.json({ success: true, data: data.Media });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 4. Watch Route (Custom Scraper)
+app.get('/api/anime/watch/:episodeId', async (req, res) => {
+  try {
+    const episodeId = req.params.episodeId;
+    const watchUrl = `https://anitaku.pe/${episodeId}`;
+    
+    const { data: pageHtml } = await axios.get(watchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
+      timeout: 5000
+    });
+
+    const $ = cheerio.load(pageHtml);
+    let iframeUrl = $('div.play-video iframe').attr('src');
+
+    if (!iframeUrl) {
+      return res.status(404).json({ success: false, error: 'Video stream frame not found' });
+    }
+
+    if (iframeUrl.startsWith('//')) {
+      iframeUrl = `https:${iframeUrl}`;
+    }
+
+    res.json({
+      success: true,
+      episodeId: episodeId,
+      embedUrl: iframeUrl,
+      sources: []
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Root route
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
-    message: 'Anime Streaming API is live on Vercel!',
+    message: 'Anime Streaming API is live!',
     endpoints: {
       trending: '/api/anime/trending',
       search: '/api/anime/search?query=naruto',
