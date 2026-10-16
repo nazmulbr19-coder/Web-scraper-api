@@ -1,7 +1,8 @@
 {
-  "name": "web-scraper-api",
+  "name": "anime-streaming-api",
   "version": "1.0.0",
-  "private": true,
+  "description": "Custom Anime Streaming Backend API",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
