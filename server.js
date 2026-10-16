@@ -151,7 +151,7 @@ app.get('/api/anime/watch/:episodeId', async (req, res) => {
   }
 });
 
-// Root route
+// Root API Status Route
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
@@ -171,4 +171,4 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
 }
 
 module.exports = app;
-            
+
