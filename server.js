@@ -13,16 +13,12 @@ app.use(cors({
 
 app.use(express.json());
 
-// --- ANILIST API (Trending, Search & Info) ---
 const ANILIST_URL = 'https://graphql.anilist.co';
 
 async function fetchAniList(query, variables = {}) {
   try {
     const response = await axios.post(ANILIST_URL, { query, variables }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       timeout: 6000
     });
     return response.data?.data || {};
@@ -31,7 +27,6 @@ async function fetchAniList(query, variables = {}) {
   }
 }
 
-// 1. Trending Route
 app.get('/api/anime/trending', async (req, res) => {
   try {
     const query = `
@@ -55,7 +50,6 @@ app.get('/api/anime/trending', async (req, res) => {
   }
 });
 
-// 2. Search Route
 app.get('/api/anime/search', async (req, res) => {
   try {
     const searchQuery = req.query.query;
@@ -83,7 +77,6 @@ app.get('/api/anime/search', async (req, res) => {
   }
 });
 
-// 3. Info Route
 app.get('/api/anime/info/:id', async (req, res) => {
   try {
     const animeId = parseInt(req.params.id);
@@ -111,7 +104,6 @@ app.get('/api/anime/info/:id', async (req, res) => {
   }
 });
 
-// 4. Watch Route (Safe Robust Scraper)
 app.get('/api/anime/watch/:episodeId', async (req, res) => {
   try {
     const episodeId = req.params.episodeId;
@@ -128,10 +120,7 @@ app.get('/api/anime/watch/:episodeId', async (req, res) => {
       });
       pageHtml = response.data || '';
     } catch (netErr) {
-      return res.status(502).json({ 
-        success: false, 
-        error: `Target streaming site unreachable: ${netErr.message}` 
-      });
+      return res.status(502).json({ success: false, error: `Target streaming site unreachable: ${netErr.message}` });
     }
 
     let iframeUrl = '';
@@ -145,31 +134,19 @@ app.get('/api/anime/watch/:episodeId', async (req, res) => {
     }
 
     if (!iframeUrl) {
-      return res.status(404).json({ 
-        success: false, 
-        error: `Stream source unavailable for Episode: ${episodeId}` 
-      });
+      return res.status(404).json({ success: false, error: `Stream source unavailable for Episode: ${episodeId}` });
     }
 
     if (iframeUrl.startsWith('//')) {
       iframeUrl = `https:${iframeUrl}`;
     }
 
-    res.json({
-      success: true,
-      episodeId: episodeId,
-      embedUrl: iframeUrl,
-      sources: []
-    });
+    res.json({ success: true, episodeId, embedUrl: iframeUrl, sources: [] });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: `Failed to fetch stream: ${error.message}` 
-    });
+    res.status(500).json({ success: false, error: `Failed to fetch stream: ${error.message}` });
   }
 });
 
-// Root route
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
