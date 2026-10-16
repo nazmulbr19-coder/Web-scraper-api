@@ -12,7 +12,7 @@ router.get('/search', async (req, res) => {
   res.json({ results });
 });
 
-// Anime info route (Pass AniList numeric ID like ?id=1 for Cowboy Bebop or ?id=21 for One Piece)
+// Anime info & streaming episodes route
 router.get('/info', async (req, res) => {
   const id = req.query.id;
   if (!id) {
@@ -23,6 +23,14 @@ router.get('/info', async (req, res) => {
     return res.status(404).json({ error: 'Anime not found' });
   }
   res.json(details);
+});
+
+// Watch / Stream fallback route
+router.get('/watch', async (req, res) => {
+  res.status(410).json({ 
+    error: 'Direct video scraping is unavailable on Vercel due to Cloudflare anti-bot protection.',
+    message: 'Please use the streaming links provided in the /info endpoint under streamingEpisodes.' 
+  });
 });
 
 module.exports = router;
