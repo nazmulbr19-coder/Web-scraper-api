@@ -13,7 +13,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// --- ANILIST API (Trending & Search & Info) ---
+// --- ANILIST API (Trending, Search & Info) ---
 const ANILIST_URL = 'https://graphql.anilist.co';
 
 async function fetchAniList(query, variables = {}) {
@@ -102,7 +102,7 @@ app.get('/api/anime/info/:id', async (req, res) => {
   }
 });
 
-// 4. Watch Route (Custom Scraper)
+// 4. Watch Route (Robust Custom Scraper)
 app.get('/api/anime/watch/:episodeId', async (req, res) => {
   try {
     const episodeId = req.params.episodeId;
@@ -110,16 +110,24 @@ app.get('/api/anime/watch/:episodeId', async (req, res) => {
     
     const { data: pageHtml } = await axios.get(watchUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://anitaku.pe/'
       },
-      timeout: 5000
+      timeout: 6000
     });
 
     const $ = cheerio.load(pageHtml);
-    let iframeUrl = $('div.play-video iframe').attr('src');
+    
+    // Check multiple common embed selectors used by streaming sources
+    let iframeUrl = 
+      $('div.play-video iframe').attr('src') \vert{}\vert{}$('div.anime_video_body iframe').attr('src') || 
+      $('iframe.embed-responsive-item').attr('src') \vert{}\vert{}$('iframe').first().attr('src');
 
     if (!iframeUrl) {
-      return res.status(404).json({ success: false, error: 'Video stream frame not found' });
+      return res.status(404).json({ 
+        success: false, 
+        error: `Stream source unavailable for Episode: ${episodeId}` 
+      });
     }
 
     if (iframeUrl.startsWith('//')) {
@@ -133,7 +141,10 @@ app.get('/api/anime/watch/:episodeId', async (req, res) => {
       sources: []
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: `Failed to fetch stream: ${error.message}` 
+    });
   }
 });
 
