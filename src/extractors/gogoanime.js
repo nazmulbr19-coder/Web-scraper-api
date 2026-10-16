@@ -11,7 +11,10 @@ async function searchGogoanime(query) {
 
   try {
     const { data } = await axios.get(`${BASE_URL}/search.html?keyword=${encodeURIComponent(query)}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
     });
     const $ = cheerio.load(data);
     const results = [];
@@ -42,7 +45,9 @@ async function getAnimeDetails(animeId) {
 
   try {
     const { data } = await axios.get(`${BASE_URL}/category/${animeId}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' 
+      }
     });
     const $ = cheerio.load(data);
 
@@ -60,6 +65,10 @@ async function getAnimeDetails(animeId) {
 
     const anime_id = $('#movie_id').val();
     const alias = $('#alias_anime').val();
+
+    if (!anime_id) {
+      return { error: 'Blocked by anti-bot protection or anime not found' };
+    }
 
     const epResponse = await axios.get(`https://ajax.gogocdn.net/ajax/load-list-episode?ep_start=0&ep_end=9999&id=${anime_id}&default_ep=0&alias=${alias}`);
     const $$ = cheerio.load(epResponse.data); const episodes = [];      $$('li').each((_, el) => {
@@ -84,13 +93,27 @@ async function getEpisodeSources(episodeId) {
   if (cached) return cached;
 
   try {
-    const { data } = await axios.get(`${BASE_URL}/${episodeId}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    const targetUrl = `${BASE_URL}/${episodeId}`;
+    const { data } = await axios.get(targetUrl, {
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': BASE_URL
+      }
     });
     const $ = cheerio.load(data);
-    const embedUrl = $('div.play-video iframe').attr('src');
+    let embedUrl = $('div.play-video iframe').attr('src');
 
-    if (!embedUrl) return { error: 'Video stream source not found' };
+    // Fallback search if class names changed
+    if (!embedUrl) {
+      embedUrl = $('iframe').attr('src');
+    }
+
+    if (!embedUrl) {
+      return { 
+        error: 'Video stream source blocked or not found', 
+        details: 'The target site is returning a Cloudflare challenge block against Vercel cloud IPs.' 
+      };
+    }
 
     const fullEmbedUrl = embedUrl.startsWith('http') ? embedUrl : `https:${embedUrl}`;
 
@@ -103,7 +126,7 @@ async function getEpisodeSources(episodeId) {
     return sources;
   } catch (error) {
     console.error('Gogoanime Sources Error:', error.message);
-    return { error: 'Failed to fetch video stream sources' };
+    return { error: 'Failed to fetch video stream sources due to server block' };
   }
 }
 
