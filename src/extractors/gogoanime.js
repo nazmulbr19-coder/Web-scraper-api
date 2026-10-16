@@ -1,48 +1,110 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const cache = require('../utils/cache');
 
-class GogoAnimeExtractor {
-  constructor() {
-    this.baseUrl = 'https://anitaku.pe';
-  }
+const BASE_URL = 'https://anitaku.pe';
 
-  async extractStream(episodeId) {
-    try {
-      const watchUrl = `${this.baseUrl}/${episodeId}`;
-      const { data: pageHtml } = await axios.get(watchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
-        timeout: 5000
-      });
+async function searchGogoanime(query) {
+  const cacheKey = `search_${query}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
 
-      const $ = cheerio.load(pageHtml);
-      let iframeUrl = $('div.play-video iframe').attr('src');
+  try {
+    const { data } = await axios.get(`${BASE_URL}/search.html?keyword=${encodeURIComponent(query)}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
+    const $ = cheerio.load(data);
+    const results = [];
 
-      if (!iframeUrl) {
-        return {
-          success: false,
-          error: 'Stream frame not found'
-        };
+    $('.items li').each((_, element) => {
+      const title = $(element).find('.name a').text().trim();
+      const animeId = $(element).find('.name a').attr('href')?.split('/')[2];
+      const image = $(element).find('.img img').attr('src');
+      const releaseDate = $(element).find('.released').text().trim();
+
+      if (animeId) {
+        results.push({ id: animeId, title, image, releaseDate });
       }
+    });
 
-      if (iframeUrl.startsWith('//')) {
-        iframeUrl = `https:${iframeUrl}`;
-      }
-
-      return {
-        success: true,
-        episodeId: episodeId,
-        embedUrl: iframeUrl,
-        sources: []
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
-      };
-    }
+    cache.set(cacheKey, results);
+    return results;
+  } catch (error) {
+    console.error('Gogoanime Search Error:', error.message);
+    return [];
   }
 }
 
-module.exports = new GogoAnimeExtractor();
+async function getAnimeDetails(animeId) {
+  const cacheKey = `details_${animeId}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const { data } = await axios.get(`${BASE_URL}/category/${animeId}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
+    const $ = cheerio.load(data);
+
+    const title = $('.anime_info_body_bg h1').text().trim();
+    const image = $('.anime_info_body_bg img').attr('src');
+    const synopsis = $('.description').text().trim();
+    
+    const genres = [];
+    $('.anime_info_body_bg p').each((_, el) => {
+      const text = $(el).text();
+      if (text.includes('Genre:')) {
+        $(el).find('a').each((__, a) => genres.push($(a).text().trim()));
+      }
+    });
+
+    const anime_id = $('#movie_id').val();
+    const alias = $('#alias_anime').val();
+
+    const epResponse = await axios.get(`https://ajax.gogocdn.net/ajax/load-list-episode?ep_start=0&ep_end=9999&id=${anime_id}&default_ep=0&alias=${alias}`);
+    const $$ = cheerio.load(epResponse.data); const episodes = [];      $$('li').each((_, el) => {
+      const epId = $$(el).find('a').attr('href')?.trim().split('/')[1]; const epNum = $$(el).find('.name').text().replace('EP', '').trim();
+      if (epId) {
+        episodes.push({ episodeId: epId, episodeNumber: Number(epNum) });
+      }
+    });
+
+    const details = { id: animeId, title, image, synopsis, genres, episodes: episodes.reverse() };
+    cache.set(cacheKey, details);
+    return details;
+  } catch (error) {
+    console.error('Gogoanime Details Error:', error.message);
+    return null;
+  }
+}
+
+async function getEpisodeSources(episodeId) {
+  const cacheKey = `sources_${episodeId}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const { data } = await axios.get(`${BASE_URL}/${episodeId}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
+    const $ = cheerio.load(data);
+    const embedUrl = $('div.play-video iframe').attr('src');
+
+    if (!embedUrl) return { error: 'Video stream source not found' };
+
+    const fullEmbedUrl = embedUrl.startsWith('http') ? embedUrl : `https:${embedUrl}`;
+
+    const sources = {
+      embedUrl: fullEmbedUrl,
+      headers: { Referer: BASE_URL }
+    };
+
+    cache.set(cacheKey, sources);
+    return sources;
+  } catch (error) {
+    console.error('Gogoanime Sources Error:', error.message);
+    return { error: 'Failed to fetch video stream sources' };
+  }
+}
+
+module.exports = { searchGogoanime, getAnimeDetails, getEpisodeSources };
