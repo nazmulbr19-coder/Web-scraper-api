@@ -18,8 +18,14 @@ const ANILIST_URL = 'https://graphql.anilist.co';
 
 async function fetchAniList(query, variables = {}) {
   try {
-    const response = await axios.post(ANILIST_URL, { query, variables });
-    return response.data.data;
+    const response = await axios.post(ANILIST_URL, { query, variables }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      timeout: 6000
+    });
+    return response.data?.data || {};
   } catch (error) {
     throw new Error(`AniList API Error: ${error.message}`);
   }
@@ -43,7 +49,7 @@ app.get('/api/anime/trending', async (req, res) => {
       }
     `;
     const data = await fetchAniList(query);
-    res.json({ success: true, data: data.Page.media });
+    res.json({ success: true, data: data?.Page?.media || [] });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -71,7 +77,7 @@ app.get('/api/anime/search', async (req, res) => {
       }
     `;
     const data = await fetchAniList(query, { search: searchQuery });
-    res.json({ success: true, data: data.Page.media });
+    res.json({ success: true, data: data?.Page?.media || [] });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -96,32 +102,47 @@ app.get('/api/anime/info/:id', async (req, res) => {
       }
     `;
     const data = await fetchAniList(query, { id: animeId });
+    if (!data?.Media) {
+      return res.status(404).json({ success: false, error: 'Anime not found' });
+    }
     res.json({ success: true, data: data.Media });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 4. Watch Route (Robust Custom Scraper)
+// 4. Watch Route (Safe Robust Scraper)
 app.get('/api/anime/watch/:episodeId', async (req, res) => {
   try {
     const episodeId = req.params.episodeId;
     const watchUrl = `https://anitaku.pe/${episodeId}`;
     
-    const { data: pageHtml } = await axios.get(watchUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://anitaku.pe/'
-      },
-      timeout: 6000
-    });
+    let pageHtml = '';
+    try {
+      const response = await axios.get(watchUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://anitaku.pe/'
+        },
+        timeout: 6000
+      });
+      pageHtml = response.data || '';
+    } catch (netErr) {
+      return res.status(502).json({ 
+        success: false, 
+        error: `Target streaming site unreachable: ${netErr.message}` 
+      });
+    }
 
-    const $ = cheerio.load(pageHtml);
-    
-    // Check multiple common embed selectors used by streaming sources
-    let iframeUrl = 
-      $('div.play-video iframe').attr('src') \vert{}\vert{}$('div.anime_video_body iframe').attr('src') || 
-      $('iframe.embed-responsive-item').attr('src') \vert{}\vert{}$('iframe').first().attr('src');
+    let iframeUrl = '';
+    try {
+      const $ = cheerio.load(pageHtml);
+      iframeUrl = 
+        $('div.play-video iframe').attr('src') \vert{}\vert{}$('div.anime_video_body iframe').attr('src') || 
+        $('iframe.embed-responsive-item').attr('src') \vert{}\vert{}$('iframe').first().attr('src') || '';
+    } catch (parseErr) {
+      iframeUrl = '';
+    }
 
     if (!iframeUrl) {
       return res.status(404).json({ 
