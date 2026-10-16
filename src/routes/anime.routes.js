@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { searchGogoanime, getAnimeDetails, getEpisodeSources } = require('../extractors/gogoanime');
+const { searchAnime, getAnimeDetails } = require('../services/anilist');
 
 // Search route
 router.get('/search', async (req, res) => {
@@ -8,11 +8,11 @@ router.get('/search', async (req, res) => {
   if (!query) {
     return res.status(400).json({ error: 'Query parameter is required' });
   }
-  const results = await searchGogoanime(query);
+  const results = await searchAnime(query);
   res.json({ results });
 });
 
-// Anime info & episodes route
+// Anime info route (Pass AniList numeric ID like ?id=1 for Cowboy Bebop or ?id=21 for One Piece)
 router.get('/info', async (req, res) => {
   const id = req.query.id;
   if (!id) {
@@ -25,14 +25,5 @@ router.get('/info', async (req, res) => {
   res.json(details);
 });
 
-// Episode watch/stream sources route
-router.get('/watch', async (req, res) => {
-  const episodeId = req.query.episodeId;
-  if (!episodeId) {
-    return res.status(400).json({ error: 'Episode ID parameter is required' });
-  }
-  const sources = await getEpisodeSources(episodeId);
-  res.json(sources);
-});
-
 module.exports = router;
+
